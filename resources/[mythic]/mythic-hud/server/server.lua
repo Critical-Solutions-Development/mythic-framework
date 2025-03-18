@@ -8,6 +8,7 @@ function RetrieveComponents()
 	Callbacks = exports["mythic-base"]:FetchComponent("Callbacks")
 	Inventory = exports["mythic-base"]:FetchComponent("Inventory")
 	Execute = exports["mythic-base"]:FetchComponent("Execute")
+	Middleware = exports["mythic-base"]:FetchComponent("Middleware")
 	RegisterChatCommands()
 end
 
@@ -19,34 +20,78 @@ AddEventHandler("Core:Shared:Ready", function()
 		"Callbacks",
 		"Inventory",
 		"Execute",
+		"Middleware",
 	}, function(error)
 		if #error > 0 then
 			return
 		end -- Do something to handle if not all dependencies loaded
 		RetrieveComponents()
 
-		Callbacks:RegisterServerCallback("HUD:RemoveBlindfold", function(source, data, cb)
+		Middleware:Add("Characters:Creating", function(source, cData)
+			return {
+				{
+					HUDConfig = {
+						layout = "default",
+						statusType = "numbers",
+						buffsAnchor = "compass",
+						vehicle = "default",
+						buffsAnchor2 = true,
+						showRPM = true,
+						hideCrossStreet = false,
+						hideCompassBg = false,
+						minimapAnchor = true,
+						transparentBg = true,
+					},
+				},
+			}
+		end)
+		Middleware:Add("Characters:Spawning", function(source)
 			local plyr = Fetch:Source(source)
-			if plyr ~= nil then
-				local char = plyr:GetData("Character")
-				if char ~= nil then
-					local tarState = Player(data).state
-					if tarState.isBlindfolded then
-						Callbacks:ClientCallback(source, "HUD:PutOnBlindfold", "Removing Blindfold", function(isSuccess)
-							if isSuccess then
-								if Inventory:AddItem(char:GetData("SID"), "blindfold", 1, {}, 1) then
-									tarState.isBlindfolded = false
-								else
-									Execute:Client(source, "Notification", "Error", "Failed Adding Item")
-									cb(false)
-								end
+			local config = plyr:GetData("HUDConfig")
+			if not config then
+				plyr:SetData("HUDConfig", {
+					layout = "default",
+					statusType = "numbers",
+					buffsAnchor = "compass",
+					vehicle = "default",
+					buffsAnchor2 = true,
+					showRPM = true,
+					hideCrossStreet = false,
+					hideCompassBg = false,
+					minimapAnchor = true,
+					transparentBg = true,
+				})
+			end
+		end, 1)
+
+		Callbacks:RegisterServerCallback("HUD:SaveConfig", function(source, data, cb)
+			local char = Fetch:CharacterSource(source)
+			if char ~= nil then
+				char:SetData("HUDConfig", data)
+				cb(true)
+			else
+				cb(false)
+			end
+		end)
+
+		Callbacks:RegisterServerCallback("HUD:RemoveBlindfold", function(source, data, cb)
+			local char = Fetch:CharacterSource(source)
+			if char ~= nil then
+				local tarState = Player(data).state
+				if tarState.isBlindfolded then
+					Callbacks:ClientCallback(source, "HUD:PutOnBlindfold", "Removing Blindfold", function(isSuccess)
+						if isSuccess then
+							if Inventory:AddItem(char:GetData("SID"), "blindfold", 1, {}, 1) then
+								tarState.isBlindfolded = false
+								TriggerClientEvent("VOIP:Client:Gag:Use", data)
+							else
+								Execute:Client(source, "Notification", "Error", "Failed Adding Item")
+								cb(false)
 							end
-						end)
-					else
-						Execute:Client(source, "Notification", "Error", "Target Not Blindfolded")
-						cb(false)
-					end
+						end
+					end)
 				else
+					Execute:Client(source, "Notification", "Error", "Target Not Blindfolded")
 					cb(false)
 				end
 			else
@@ -59,31 +104,20 @@ AddEventHandler("Core:Shared:Ready", function()
 				if target ~= nil then
 					local tarState = Player(target).state
 					if not tarState.isBlindfolded then
-						Callbacks:ClientCallback(
-							source,
-							"HUD:PutOnBlindfold",
-							"Blindfolding",
-							function(isSuccess)
-								if isSuccess then
-									if tarState.isCuffed then
-										if
-											Inventory.Items:RemoveSlot(item.Owner, item.Name, 1, item.Slot, 1)
-										then
-											tarState.isBlindfolded = true
-										else
-											Execute:Client(
-												source,
-												"Notification",
-												"Error",
-												"Failed Removing Item"
-											)
-										end
+						Callbacks:ClientCallback(source, "HUD:PutOnBlindfold", "Blindfolding", function(isSuccess)
+							if isSuccess then
+								if tarState.isCuffed then
+									if Inventory.Items:RemoveSlot(item.Owner, item.Name, 1, item.Slot, 1) then
+										tarState.isBlindfolded = true
+										TriggerClientEvent("VOIP:Client:Gag:Use", target)
 									else
-										Execute:Client(source, "Notification", "Error", "Target Not Cuffed")
+										Execute:Client(source, "Notification", "Error", "Failed Removing Item")
 									end
+								else
+									Execute:Client(source, "Notification", "Error", "Target Not Cuffed")
 								end
 							end
-						)
+						end)
 					else
 						Execute:Client(source, "Notification", "Error", "Target Already Blindfolded")
 					end
@@ -107,13 +141,16 @@ function RegisterChatCommands()
 		help = "Resets UI",
 	})
 
+	Chat:RegisterCommand("hud", function(source, args, rawCommand)
+		TriggerClientEvent("UI:Client:Configure", source, true)
+	end, {
+		help = "Open HUD Config Menu",
+	})
+
 	Chat:RegisterAdminCommand("testblindfold", function(source, args, rawCommand)
-		local plyr = Fetch:Source(source)
-		if plyr ~= nil then
-			local char = plyr:GetData("Character")
-			if char ~= nil then
-				Player(source).state.isBlindfolded = not Player(source).state.isBlindfolded
-			end
+		local char = Fetch:CharacterSource(source)
+		if char ~= nil then
+			Player(source).state.isBlindfolded = not Player(source).state.isBlindfolded
 		end
 	end, {
 		help = "Test Blindfold",

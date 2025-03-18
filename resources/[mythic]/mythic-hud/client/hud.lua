@@ -45,6 +45,7 @@ function RetrieveComponents()
 	Jail = exports["mythic-base"]:FetchComponent("Jail")
 	Animations = exports["mythic-base"]:FetchComponent("Animations")
 	Admin = exports["mythic-base"]:FetchComponent("Admin")
+	Buffs = exports["mythic-base"]:FetchComponent("Buffs")
 end
 
 AddEventHandler("Core:Shared:Ready", function()
@@ -65,6 +66,8 @@ AddEventHandler("Core:Shared:Ready", function()
 		"Jail",
 		"Animations",
 		"Admin",
+		"Buffs",
+
 	}, function(error)
 		if #error > 0 then
 			return
@@ -175,6 +178,16 @@ HUD = {
 				or LocalPlayer.state.crafting
 				or LocalPlayer.state.isHospitalized
 			)
+	end,
+	ForceHP = function(self)
+		SendNUIMessage({
+			type = "UPDATE_HP",
+			data = {
+				hp = (GetEntityHealth(LocalPlayer.state.ped) - 100),
+				maxHp = (GetEntityMaxHealth(LocalPlayer.state.ped) - 100),
+				armor = GetPedArmour(LocalPlayer.state.ped),
+			},
+		})
 	end,
 	Show = function(self)
 		if _toggled then
@@ -420,7 +433,7 @@ HUD = {
 					type = type,
 					deathTime = deathTime,
 					timer = timer,
-					medicalPrice = (not GlobalState["Duty:ems"] or GlobalState["Duty:ems"] == 0) and 150 or 5000
+					medicalPrice = 1500 -- (not GlobalState["Duty:ems"] or GlobalState["Duty:ems"] == 0) and 150 or 5000
 				},
 			})
 		end,
