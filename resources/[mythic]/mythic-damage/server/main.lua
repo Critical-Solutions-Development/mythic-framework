@@ -1,5 +1,5 @@
 _damagedLimbs = {}
-_dead = {}
+_deadCunts = {}
 
 function table.copy(t)
 	local u = {}
@@ -43,45 +43,67 @@ AddEventHandler("Core:Shared:Ready", function()
 
 		Middleware:Add("Characters:Spawning", function(source)
 			local plyr = Fetch:Source(source)
-			if plyr ~= nil then
-				local char = plyr:GetData("Character")
-				if char ~= nil then
-					if char:GetData("Damage") ~= nil then
-						char:SetData("Damage", nil)
-					end
-					_damagedLimbs[char:GetData("SID")] = _damagedLimbs[char:GetData("SID")] or {}
+			if char ~= nil then
+				local sid = char:GetData("SID")
+				if _deadCunts[sid] ~= nil then
+					local pState = Player(source).state
+					pState.isDead = true
+					pState.deadData = _deadCunts[sid].deadData
+					pState.isDeadTime = _deadCunts[sid].isDeadTime
+					pState.releaseTime = _deadCunts[sid].releaseTime
+
+					Citizen.Wait(100)
 				end
+
+				if char:GetData("Damage") ~= nil then
+					char:SetData("Damage", nil)
+				end
+				_damagedLimbs[char:GetData("SID")] = _damagedLimbs[char:GetData("SID")] or {}
 			end
 		end, 2)
 
-		Middleware:Add("Characters:Logout", function(source)
-			SetPlayerInvincible(source, false)
-			Player(source).state.isGodmode = false
-		end, 2)
-
 		Callbacks:RegisterServerCallback("Damage:GetLimbDamage", function(source, data, cb)
-			local char = Fetch:Source(data):GetData("Character")
+			if data == nil or source == nil then
+				cb({})
+				return
+			end
+			local char = Fetch:CharacterSource(data)
 			if char ~= nil then
 				local damage = Damage:GetLimbDamage(char:GetData("SID"))
 
 				local menuData = {}
 
+				local reductions = char:GetData("HPReductions") or 0
+				if reductions > 0 then
+					if reductions > 1 then
+						table.insert(menuData, {
+							label = "Signs of Trauma",
+							description = "Signs of multiple major traumas (Health Reduced)",
+						})
+					else
+						table.insert(menuData, {
+							label = "Sign of Trauma",
+							description = "Sign of major trauma (Health Reduced)",
+						})
+					end
+				end
+
 				for k, v in pairs(damage) do
 					local descStr = ""
 
 					local data = {}
-                    for k2, v2 in pairs(v) do
-                        if v2 > 0 then
-                            table.insert(data, string.format("%s %s", v2, Config.DamageTypeLabels[k2]))
-                        end
-                    end
+					for k2, v2 in pairs(v) do
+						if v2 > 0 then
+							table.insert(data, string.format("%s %s", v2, Config.DamageTypeLabels[k2]))
+						end
+					end
 
-                    if #data > 0 then
-                        table.insert(menuData, {
+					if #data > 0 then
+						table.insert(menuData, {
 							label = Config.BoneLabels[k],
 							description = table.concat(data, ", "),
 						})
-                    end
+					end
 				end
 
 				if #menuData == 0 then
@@ -93,6 +115,13 @@ AddEventHandler("Core:Shared:Ready", function()
 				cb(menuData)
 			end
 		end)
+
+		Callbacks:RegisterServerCallback("Damage:SyncReductions", function(source, data, cb)
+			local plyr = Fetch:Source(source)
+			if char ~= nil then
+				char:SetData("HPReductions", data)
+			end
+		end)
 	end)
 end)
 
@@ -100,9 +129,9 @@ DAMAGE = {
 	GetLimbDamage = function(self, sid)
 		return _damagedLimbs[sid]
 	end,
-    ResetLimbDamage = function(self, sid)
-        _damagedLimbs[sid] = {}
-    end,
+	ResetLimbDamage = function(self, sid)
+		_damagedLimbs[sid] = {}
+	end,
 	Effects = {
 		Painkiller = function(self, source, tier)
 			Callbacks:ClientCallback(source, "Damage:ApplyPainkiller", 225 * (tier or 1))
@@ -117,34 +146,49 @@ AddEventHandler("Proxy:Shared:RegisterReady", function()
 	exports["mythic-base"]:RegisterComponent("Damage", DAMAGE)
 end)
 
+AddEventHandler("Characters:Server:PlayerLoggedOut", function(source, cData)
+	SetPlayerInvincible(source, false)
+	Player(source).state.isGodmode = false
+end)
+
+RegisterNetEvent("Ped:Server:Died", function()
+	local src = source
+	local plyr = Fetch:Source(src)
+	if char ~= nil then
+		local pState = Player(src).state
+		_deadCunts[char:GetData("SID")] = {
+			deadData = pState.deadData,
+			isDeadTime = pState.isDeadTime,
+			releaseTime = pState.releaseTime,
+		}
+	end
+end)
+
 RegisterNetEvent("Damage:Server:StoreHealth", function(hp, armor)
 	local src = source
 	local plyr = Fetch:Source(src)
-	if plyr ~= nil then
-		local char = plyr:GetData("Character")
-		if char ~= nil then
-			char:SetData("HP", hp)
-			char:SetData("Armor", armor)
-		end
+	if char ~= nil then
+		char:SetData("HP", hp)
+		char:SetData("Armor", armor)
 	end
 end)
 
 RegisterNetEvent("Damage:Server:BoneDamage", function(damageData)
 	local src = source
 	local plyr = Fetch:Source(src)
-	if plyr ~= nil then
-		local char = plyr:GetData("Character")
-		if char ~= nil then
-			if Config.Bones[damageData.bone] ~= "NONE" then
-				if _damagedLimbs[char:GetData("SID")][Config.Bones[damageData.bone]] == nil then
-					_damagedLimbs[char:GetData("SID")][Config.Bones[damageData.bone]] = {}
-					for k, v in ipairs(Config.DamageTypes) do
-						_damagedLimbs[char:GetData("SID")][Config.Bones[damageData.bone]][v] = 0
+	if char ~= nil then
+		local sid = char:GetData("SID")
+		for k, v in ipairs(damageData) do
+			if Config.Bones[v.bone] ~= "NONE" then
+				if _damagedLimbs[sid][Config.Bones[v.bone]] == nil then
+					_damagedLimbs[sid][Config.Bones[v.bone]] = {}
+					for k2, v2 in ipairs(Config.DamageTypes) do
+						_damagedLimbs[sid][Config.Bones[v.bone]][v2] = 0
 					end
 				end
-				local dmgType = Config.ClassDamageTypes[Config.WeaponClassBindings[damageData.hash]]
+				local dmgType = Config.ClassDamageTypes[Config.WeaponClassBindings[v.hash]]
 				if dmgType ~= nil then
-					_damagedLimbs[char:GetData("SID")][Config.Bones[damageData.bone]][dmgType] += 1
+					_damagedLimbs[sid][Config.Bones[v.bone]][dmgType] += 1
 				end
 			end
 		end
@@ -154,42 +198,40 @@ end)
 RegisterNetEvent("Damage:Server:Revived", function(wasMinor, wasFieldTreatment)
 	local src = source
 	local plyr = Fetch:Source(src)
-	if plyr ~= nil then
-		local char = plyr:GetData("Character")
-		if char ~= nil then
-			if not wasMinor and not wasFieldTreatment then
+	if char ~= nil then
+		_deadCunts[char:GetData("SID")] = nil
+		if not wasMinor and not wasFieldTreatment then
+			Logger:Trace(
+				"Damage",
+				string.format(
+					"%s %s (%s) Was Revived (Not Minor and Not Field Treatment)",
+					char:GetData("First"),
+					char:GetData("Last"),
+					char:GetData("SID")
+				)
+			)
+			Damage:ResetLimbDamage(char:GetData("SID"))
+		else
+			if wasMinor then
 				Logger:Trace(
 					"Damage",
 					string.format(
-						"%s %s (%s) Was Revived (Not Minor and Not Field Treatment)",
+						"%s %s (%s) Was Revived (Minor Injury)",
 						char:GetData("First"),
 						char:GetData("Last"),
 						char:GetData("SID")
 					)
 				)
-                Damage:ResetLimbDamage(char:GetData("SID"))
 			else
-				if wasMinor then
-					Logger:Trace(
-						"Damage",
-						string.format(
-							"%s %s (%s) Was Revived (Minor Injury)",
-							char:GetData("First"),
-							char:GetData("Last"),
-							char:GetData("SID")
-						)
+				Logger:Trace(
+					"Damage",
+					string.format(
+						"%s %s (%s) Was Revived (Field Treatment)",
+						char:GetData("First"),
+						char:GetData("Last"),
+						char:GetData("SID")
 					)
-				else
-					Logger:Trace(
-						"Damage",
-						string.format(
-							"%s %s (%s) Was Revived (Field Treatment)",
-							char:GetData("First"),
-							char:GetData("Last"),
-							char:GetData("SID")
-						)
-					)
-				end
+				)
 			end
 		end
 	end

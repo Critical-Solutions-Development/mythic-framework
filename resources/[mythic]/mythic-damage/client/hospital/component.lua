@@ -41,13 +41,13 @@ AddEventHandler("Core:Shared:Ready", function()
 		Init()
 
 		while GlobalState["HiddenHospital"] == nil do
-			Wait(5)
+			Citizen.Wait(5)
 		end
 
 		PedInteraction:Add("HiddenHospital", `s_m_m_doctor_01`, GlobalState["HiddenHospital"].coords, GlobalState["HiddenHospital"].heading, 25.0, {
 			{
 				icon = "heart-pulse",
-				text = "Revive Escort (20 $PLEB)",
+				text = "Revive Escort (20 $MALD)",
 				event = "Hospital:Client:HiddenRevive",
 				data = LocalPlayer.state.isEscorting or {},
 				isEnabled = function()
@@ -59,21 +59,38 @@ AddEventHandler("Core:Shared:Ready", function()
 					end
 				end,
 			},
-		}, 'suitcase-medical', 'CODE_HUMAN_MEDIC_KNEEL')
+		}, 'suitcase-medical', false, true, {
+			animDict = "mp_prison_break",
+			anim = "hack_loop",
+		})
 
-		Polyzone.Create:Box('hospital-check-in-zone', vector3(-436.09, -326.23, 34.91), 2.0, 3.0, {
-			heading = 338,
+		Polyzone.Create:Box('hospital-check-in-zone-1', vector3(1146.37, -1538.66, 35.03), 2.8, 1.2, {
+			heading = 0,
 			--debugPoly=true,
-			minZ = 33.91,
-			maxZ = 36.31
+			minZ = 32.63,
+  			maxZ = 36.63
 		}, {})
 
-		Targeting.Zones:AddBox("icu-checkout", "bell-concierge", vector3(-492.49, -336.15, 69.52), 0.8, 7.2, {
-			name = "hospital",
-			heading = 353,
+		Polyzone.Create:Box('hospital-check-in-zone-2', vector3(1129.59, -1534.96, 35.03), 2.8, 1.2, {
+			heading = 3,
 			--debugPoly=true,
-			minZ = 68.52,
-			maxZ = 70.52
+			minZ = 32.63,
+			maxZ = 36.63
+		}, {})
+
+		Polyzone.Create:Box('hospital-check-in-zone-3', vector3(1142.82, -1537.74, 39.5), 2.8, 1.2, {
+			heading = 88,
+			--debugPoly=true,
+			minZ = 37.1,
+			maxZ = 41.1
+		}, {})
+
+		Targeting.Zones:AddBox("icu-checkout", "bell-concierge", vector3(1147.83, -1542.54, 39.5), 2.8, 0.8, {
+			name = "hospital",
+			heading = 0,
+			--debugPoly=true,
+			minZ = 38.5,
+			maxZ = 41.1
 		}, {
 			{
 				icon = "bell-concierge",
@@ -83,6 +100,20 @@ AddEventHandler("Core:Shared:Ready", function()
 					return (LocalPlayer.state.Character:GetData("ICU") ~= nil and not LocalPlayer.state.Character:GetData("ICU").Released) and (not _done or _done < GetCloudTimeAsInt())
 				end,
 			}
+		})
+
+		Polyzone.Create:Poly("hospital-icu-area", {
+			vector2(1144.3436279297, -1541.1220703125),
+			vector2(1144.3024902344, -1560.3250732422),
+			vector2(1148.193359375, -1560.3918457031),
+			vector2(1154.2583007812, -1560.4184570312),
+			vector2(1154.3413085938, -1555.5563964844),
+			vector2(1154.4481201172, -1548.7468261719),
+			vector2(1154.1629638672, -1540.7801513672)
+		}, {
+			--debugPoly=true,
+			minZ = 38.50,
+			maxZ = 40.53
 		})
 	end)
 end)
@@ -135,8 +166,10 @@ HOSPITAL = {
 			else
 				_healEnd = GetCloudTimeAsInt() + (60 * 1)
 				Hud.DeathTexts:Show("hospital", GetCloudTimeAsInt(), _healEnd, "primary_action")
-				SetTimeout(((_healEnd - GetCloudTimeAsInt()) - 10) * 1000, function()
+				Citizen.SetTimeout(((_healEnd - GetCloudTimeAsInt()) - 10) * 1000, function()
 					if LocalPlayer.state.loggedIn and LocalPlayer.state.isHospitalized then
+						LocalPlayer.state.deadData = {}
+						Damage.Reductions:Reset()
 						Damage:Revive()
 					end
 				end)
@@ -171,23 +204,27 @@ HOSPITAL = {
 local _inCheckInZone = false
 
 AddEventHandler('Polyzone:Enter', function(id, point, insideZone, data)
-    if id == 'hospital-check-in-zone' then
+    if id == 'hospital-check-in-zone-1' or id == 'hospital-check-in-zone-2' or id == 'hospital-check-in-zone-3' then
         _inCheckInZone = true
 
 		if not LocalPlayer.state.isEscorted and (GlobalState["ems:pmc:doctor"] == nil or GlobalState["ems:pmc:doctor"] == 0) then
 			if not GlobalState["Duty:ems"] or GlobalState["Duty:ems"] == 0 then
-				Action:Show('{keybind}primary_action{/keybind} Check In {key}$150{/key}')
+				Action:Show("medical", '{keybind}primary_action{/keybind} Check In {key}$1500{/key}')
 			else
-				Action:Show('{keybind}primary_action{/keybind} Check In {key}$5000{/key}')
+				Action:Show("medical", '{keybind}primary_action{/keybind} Check In {key}$1500{/key}')
 			end
 		end
     end
 end)
 
 AddEventHandler('Polyzone:Exit', function(id, point, insideZone, data)
-    if id == 'hospital-check-in-zone' then
+    if id == 'hospital-check-in-zone-1' or id == 'hospital-check-in-zone-2' or id == 'hospital-check-in-zone-3' then
         _inCheckInZone = false
-		Action:Hide()
+		Action:Hide("medical")
+	elseif id == "hospital-icu-area" and LocalPlayer.state.loggedIn then
+		if LocalPlayer.state.Character:GetData("ICU") and not LocalPlayer.state.Character:GetData("ICU").Released then
+			TriggerEvent("Hospital:Client:ICU:Enter")
+		end
     end
 end)
 

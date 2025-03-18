@@ -7,41 +7,44 @@ local deadAnim = "dead_d"
 local vehDict = "veh@low@front_ps@idle_duck"
 local vehAnim = "sit"
 
-CreateThread(function()
+local drownDict = "dam_ko"
+local drownAnim = "drown"
+
+Citizen.CreateThread(function()
 	loadAnimDict(koDict)
 	loadAnimDict(deadDict)
 	loadAnimDict(vehDict)
 end)
 
 function ApplyLimp(ped)
-    local shouldLimp = (GetEntityHealth(ped) - 100) <= math.floor((GetEntityMaxHealth(ped) - 100) / 4)
-    if shouldLimp and not (LocalPlayer.state.onPainKillers or 0 > 0) then
-        if not LocalPlayer.state.isLimping then
-            LocalPlayer.state.isLimping = true
-            Animations.PedFeatures:RequestFeaturesUpdate()
-        end
-    else
-        if LocalPlayer.state.isLimping then
-            LocalPlayer.state.isLimping = false
-            Animations.PedFeatures:RequestFeaturesUpdate()
-        end
-    end
+	local shouldLimp = (GetEntityHealth(ped) - 100) <= math.floor((GetEntityMaxHealth(ped) - 100) / 4)
+	if shouldLimp and not (LocalPlayer.state.onPainKillers or 0 > 0) then
+		if not LocalPlayer.state.isLimping then
+			LocalPlayer.state.isLimping = true
+			Animations.PedFeatures:RequestFeaturesUpdate()
+		end
+	else
+		if LocalPlayer.state.isLimping then
+			LocalPlayer.state.isLimping = false
+			Animations.PedFeatures:RequestFeaturesUpdate()
+		end
+	end
 end
 
 function GetReleaseTime(isMinor)
-    if LocalPlayer.state.isDead then
-        if isMinor then
-            return 60 * 1
-        else
-            if LocalPlayer.state.onDuty == "police" or LocalPlayer.state.onDuty == "ems" then
-                return 60 * 1
-            else
-                return 60 * 5
-            end
-        end
-    else
-        return 0
-    end
+	if LocalPlayer.state.isDead then
+		if isMinor then
+			return 60 * 1
+		else
+			if LocalPlayer.state.onDuty == "police" or LocalPlayer.state.onDuty == "ems" then
+				return 60 * 3
+			else
+				return 60 * 5
+			end
+		end
+	else
+		return 0
+	end
 end
 
 function wasMinorDeath(hash)
@@ -54,13 +57,13 @@ end
 
 local changeHandler = nil
 RegisterNetEvent("Characters:Client:Spawn", function()
-	changeHandler = AddStateBagChangeHandler(
-		"isDead",
-		string.format("player:%s", LocalPlayer.state.serverID),
-		function(bagName, key, value, _unused, replicated)
-			DoDeadEvent()
-		end
-	)
+	-- changeHandler = AddStateBagChangeHandler(
+	-- 	"isDead",
+	-- 	string.format("player:%s", GetPlayerServerId(LocalPlayer.state.PlayerID)),
+	-- 	function(bagName, key, value, _unused, replicated)
+	-- 		DoDeadEvent()
+	-- 	end
+	-- )
 end)
 
 RegisterNetEvent("Characters:Client:Logout", function()
@@ -72,12 +75,14 @@ end)
 
 function DoDeadEvent()
 	if LocalPlayer.state.isDead then
-        Weapons:UnequipIfEquippedNoAnim()
+		Weapons:UnequipIfEquippedNoAnim()
 		if not LocalPlayer.state.gameMode then
-            DisableControls()
+			Buffs:RemoveBuffType("weakness")
+			DisableControls()
 			DeadAnimLoop()
 		else
-            TriggerEvent(string.format("Damage:Client:Gamemode:%s:Died", LocalPlayer.state.gameMode))
+			Hud.DeathTexts:Hide()
+			TriggerEvent(string.format("Damage:Client:Gamemode:%s:Died", LocalPlayer.state.gameMode))
 		end
 	else
 		Hud.DeathTexts:Hide()
@@ -86,11 +91,16 @@ function DoDeadEvent()
 	end
 end
 
+local deathLooping = false
+local aDict = deadDict
+local aAnim = deadAnim
+
 function DeadAnimLoop()
-	CreateThread(function()
+	Citizen.CreateThread(function()
 		local ped = PlayerPedId()
-		local aDict = deadDict
-		local aAnim = deadAnim
+
+		aDict = deadDict
+		aAnim = deadAnim
 
 		local seat = 0
 		local veh = GetVehiclePedIsIn(ped)
@@ -103,68 +113,72 @@ function DeadAnimLoop()
 			end
 		end
 
-		if LocalPlayer.state.deadData and LocalPlayer.state.deadData?.isMinor then
-			aDict = koDict
-			aAnim = koAnim
-		end
-
-		while GetEntitySpeed(ped) > 0.5 do
-			Wait(1)
-		end
-
 		DoScreenFadeOut(1000)
 		while not IsScreenFadedOut() do
-			Wait(10)
+			Citizen.Wait(10)
 		end
 
 		AnimpostfxPlay("DeathFailMPIn", 100.0, true)
-		AnimpostfxPlay("PPPurple", 100.0, true)
-		AnimpostfxPlay("DrugsMichaelAliensFight", 100.0, true)
-		AnimpostfxPlay("DeathFailMPDark", 100.0, true)
 
 		local loc = GetEntityCoords(ped)
-		--SetEntityCoords(ped, loc)
 		NetworkResurrectLocalPlayer(loc, true, true, false)
 
 		if not veh then
 			ClearPedTasksImmediately(ped)
 		else
 			TaskWarpPedIntoVehicle(ped, veh, seat)
-			Wait(300)
+			Citizen.Wait(300)
 		end
+	
+		if (type(LocalPlayer.state.deadData) == "table") and LocalPlayer.state?.deadData?.isMinor then
+			aDict = koDict
+			aAnim = koAnim
+		end
+		
+		DoScreenFadeIn(1000)
 
-		DoScreenFadeIn(300)
+		SetEntityHealth(ped, 200)
 
-		ClearPedTasksImmediately(ped)
-		while LocalPlayer.state.loggedIn and LocalPlayer.state.isDead and not LocalPlayer.state.isHospitalized do
-			SetEntityInvincible(ped, true)
-			SetEntityHealth(ped, 200)
-			if IsPedInAnyVehicle(ped) then
-				TaskPlayAnim(ped, vehDict, vehAnim, 8.0, -8, -1, 1, 0, 0, 0, 0)
-			elseif IsEntityInWater(ped) then
-				SetPedToRagdoll(PlayerPedId(), 3000, 3000, 3, 0, 0, 0)
-				Wait(2500)
-			elseif LocalPlayer.state.inTrunk then
-				-- dosomething?
-			else
-				TaskPlayAnim(ped, aDict, aAnim, 1.0, 1.0, -1, 1, 0, 0, 0, 0)
+		if not deathLooping then
+			deathLooping = true
+
+			while LocalPlayer.state.loggedIn and LocalPlayer.state.isDead and not LocalPlayer.state.isHospitalized do
+				ped = PlayerPedId()
+	
+				if not LocalPlayer.state?.deadData?.isMinor then
+					SetEntityInvincible(ped, true)
+				else
+					SetEntityInvincible(ped, false)
+				end
+	
+				if IsPedInAnyVehicle(ped) then
+					TaskPlayAnim(ped, vehDict, vehAnim, 8.0, -8, -1, 1, 0, 0, 0, 0)
+				elseif IsEntityInWater(ped) then
+					TaskPlayAnim(ped, drownDict, drownAnim, 8.0, -8, -1, 1, 0, 0, 0, 0)
+				elseif LocalPlayer.state.inTrunk then
+					-- dosomething?
+				else
+					TaskPlayAnim(ped, aDict, aAnim, 1.0, 1.0, -1, 1, 0, 0, 0, 0)
+				end
+				Citizen.Wait(100)
 			end
-			Wait(100)
+	
+			AnimpostfxStop("DeathFailMPIn")
+	
+			Hud.DeathTexts:Hide()
+			ClearPedTasksImmediately(ped)
+			SetEntityInvincible(ped, LocalPlayer.state.isAdmin and LocalPlayer.state.isGodmode or false)
+
+			deathLooping = false
 		end
-
-		AnimpostfxStop("DeathFailMPIn")
-		AnimpostfxStop("PPPurple")
-		AnimpostfxStop("DrugsMichaelAliensFight")
-		AnimpostfxStop("DeathFailMPDark")
-
-		Hud.DeathTexts:Hide()
-		ClearPedTasksImmediately(ped)
-		SetEntityInvincible(ped, LocalPlayer.state.isAdmin and LocalPlayer.state.isGodmode or false)
 	end)
 end
 
+local disabling = false
 function DisableControls()
-	CreateThread(function()
+	if disabling then return end
+	disabling = true
+	Citizen.CreateThread(function()
 		while LocalPlayer.state.loggedIn and LocalPlayer.state.isDead do
 			DisableControlAction(0, 30, true) -- disable left/right
 			DisableControlAction(0, 31, true) -- disable forward/back
@@ -189,8 +203,9 @@ function DisableControls()
 			DisableControlAction(0, 263, true) -- disable melee
 			DisableControlAction(0, 264, true) -- disable melee
 			DisableControlAction(0, 257, true) -- disable melee
-			Wait(1)
+			Citizen.Wait(1)
 		end
+		disabling = false
 	end)
 end
 
