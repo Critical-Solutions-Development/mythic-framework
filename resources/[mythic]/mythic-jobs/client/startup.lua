@@ -9,7 +9,6 @@ function RetrieveComponents()
     Inventory = exports['mythic-base']:FetchComponent('Inventory')
     Sounds = exports["mythic-base"]:FetchComponent("Sounds")
     
-
 end
 
 AddEventHandler('Core:Shared:Ready', function()
@@ -22,7 +21,7 @@ AddEventHandler('Core:Shared:Ready', function()
         "Polyzone",
         'Inventory',
         'Sounds'
-
+        
     }, function(error)
         if #error > 0 then return; end
         RetrieveComponents()

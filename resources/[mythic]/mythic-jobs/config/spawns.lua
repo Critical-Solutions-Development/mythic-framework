@@ -16,6 +16,36 @@ _jobSpawns = {
             },
         }
     },
+    ['redline'] = {
+        icon = "car",
+        locations = {
+            {
+                label = "Redline",
+                workplace = false,
+                location = {
+                    x = -600.202,
+                    y = -914.141,
+                    z = 23.887,
+                    h = 177.258,
+                }
+            }
+        }
+    },
+    ['taco'] = {
+        icon = "bowl-food",
+        locations = {
+            {
+                label = "Taco Farmer",
+                workplace = false,
+                location = {
+                    x = 116.985,
+                    y = -1039.424,
+                    z = 29.278,
+                    h = 131.048,
+                }
+            }
+        }
+    },
     ["blackline"] = {
         icon = "car",
         locations = {
@@ -125,13 +155,13 @@ _jobSpawns = {
         icon = "star-of-life",
         locations = {
             {
-                label = "Mt Zonah Medical",
+                label = "Vespucci Medical Center",
                 workplace = "safd",
                 location = {
-                    x = -435.302,
-                    y = -306.880,
-                    z = 34.999,
-                    h = 199.190,
+                    x = -810.320,
+                    y = -1222.991,
+                    z = 11.314,
+                    h = 226.267,
                 },
             },
         }

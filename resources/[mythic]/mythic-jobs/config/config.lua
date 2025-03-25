@@ -1,7 +1,4 @@
-_defaultJobData = {}
-
-
-_metalDetectorLocations = {
+_defaultJobData = {}_metalDetectorLocations = {
 	["vanilla_unicorn_01"] = {
 		coords = vector3(129.49, -1299.94, 29.23),
 		width = 1.0,
